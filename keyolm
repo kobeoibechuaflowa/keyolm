@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Get Key</title>
+</head>
+<body>
+<h2>🎉 Key của bạn</h2>
+<pre id="key"></pre>
+
+<script>
+function generateKey() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let k = "OLM-";
+  for (let i = 0; i < 12; i++) {
+    k += chars[Math.floor(Math.random() * chars.length)];
+    if ((i + 1) % 4 === 0 && i !== 11) k += "-";
+  }
+  return k;
+}
+
+const key = generateKey();
+const expire = Date.now() + 24 * 60 * 60 * 1000;
+
+localStorage.setItem("tool_key_data", JSON.stringify({
+  key,
+  expire
+}));
+
+document.getElementById("key").textContent =
+  key + "\n⏰ Hết hạn sau 24 giờ";
+</script>
+</body>
+</html>
