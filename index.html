@@ -86,6 +86,16 @@
             box-shadow: 0 10px 20px rgba(245, 87, 108, 0.3);
         }
         
+        .link-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .link-button:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+        
         .link-button i {
             margin-right: 10px;
         }
@@ -159,6 +169,16 @@
             color: #667eea;
             text-decoration: none;
         }
+        
+        .status-info {
+            background: #e7f3ff;
+            border: 1px solid #b3d7ff;
+            color: #0066cc;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -185,11 +205,15 @@
             <p>Key sẽ hiển thị để bạn copy và sử dụng</p>
         </div>
         
+        <div id="statusInfo" class="status-info" style="display: none;">
+            <i class="fas fa-info-circle"></i> <span id="statusText"></span>
+        </div>
+        
         <a href="https://link-target.net/2509677/AOcvD5qklmiL" target="_blank" class="link-button" id="linkBtn">
             <i class="fas fa-external-link-alt"></i> VƯỢT LINK QUẢNG CÁO
         </a>
         
-        <button class="link-button" id="completeBtn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <button class="link-button" id="completeBtn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);" disabled>
             <i class="fas fa-key"></i> TÔI ĐÃ HOÀN THÀNH - LẤY KEY
         </button>
         
@@ -219,15 +243,94 @@
     <script>
         const LINKVERTISE_URL = 'https://link-target.net/2509677/AOcvD5qklmiL';
         const ENCRYPT_SECRET = 'dG9vbF9zZWNyZXRfa2V5XzIwMjQ=';
+        let countdownInterval = null;
         
-        // Mở link trong tab mới
+        // Kiểm tra trạng thái hiện tại khi trang được tải
+        function checkCurrentStatus() {
+            const adClicked = localStorage.getItem('ad_clicked');
+            const keyData = JSON.parse(localStorage.getItem('current_key'));
+            
+            // Nếu đã có key chưa hết hạn
+            if (keyData) {
+                const now = Date.now();
+                const timeLeft = keyData.expiresAt - now;
+                
+                if (timeLeft > 0) {
+                    // Key còn hiệu lực, hiển thị key
+                    showExistingKey(keyData, Math.floor(timeLeft / 1000));
+                    return true;
+                } else {
+                    // Key đã hết hạn, xóa dữ liệu cũ
+                    localStorage.removeItem('current_key');
+                    localStorage.removeItem('ad_clicked');
+                }
+            }
+            
+            // Nếu đã click quảng cáo nhưng chưa lấy key
+            if (adClicked === 'true') {
+                document.getElementById('completeBtn').disabled = false;
+                showStatus("Bạn đã truy cập link quảng cáo. Nhấn nút bên dưới để lấy key.");
+            } else {
+                showStatus("Vui lòng click vào link quảng cáo trước.");
+            }
+            
+            return false;
+        }
+        
+        // Hiển thị key đã có
+        function showExistingKey(keyData, secondsLeft) {
+            document.getElementById('keyDisplay').textContent = keyData.key;
+            document.getElementById('keyContainer').style.display = 'block';
+            document.getElementById('linkBtn').style.display = 'none';
+            document.getElementById('completeBtn').style.display = 'none';
+            
+            startTimer(secondsLeft);
+            showStatus(`Bạn đã có key. Key sẽ hết hạn sau ${Math.ceil(secondsLeft/60)} phút.`);
+        }
+        
+        // Hiển thị thông báo trạng thái
+        function showStatus(message) {
+            const statusDiv = document.getElementById('statusInfo');
+            const statusText = document.getElementById('statusText');
+            statusText.textContent = message;
+            statusDiv.style.display = 'block';
+        }
+        
+        // Mở link trong tab mới và lưu trạng thái
         document.getElementById('linkBtn').addEventListener('click', function(e) {
             e.preventDefault();
+            
+            // Lưu thời gian click link
+            localStorage.setItem('ad_clicked', 'true');
+            localStorage.setItem('ad_click_time', Date.now());
+            
+            // Mở link
             window.open(LINKVERTISE_URL, '_blank');
+            
+            // Kích hoạt nút lấy key
+            document.getElementById('completeBtn').disabled = false;
+            showStatus("Bạn đã truy cập link quảng cáo. Hoàn thành yêu cầu và nhấn nút bên dưới để lấy key.");
         });
         
         // Xử lý khi người dùng hoàn thành
         document.getElementById('completeBtn').addEventListener('click', function() {
+            const adClicked = localStorage.getItem('ad_clicked');
+            
+            if (adClicked !== 'true') {
+                showStatus("Vui lòng click vào link quảng cáo trước khi lấy key!");
+                return;
+            }
+            
+            // Kiểm tra xem đã có key chưa hết hạn chưa
+            const existingKey = JSON.parse(localStorage.getItem('current_key'));
+            if (existingKey) {
+                const timeLeft = existingKey.expiresAt - Date.now();
+                if (timeLeft > 0) {
+                    showStatus(`Bạn đã có key chưa hết hạn. Vui lòng đợi ${Math.ceil(timeLeft/60000)} phút nữa.`);
+                    return;
+                }
+            }
+            
             generateFreeKey();
         });
         
@@ -253,21 +356,32 @@
             const checksum = calculateChecksum(type, random);
             const key = `${type}-${random}-${checksum}`;
             
+            // Tính thời gian hết hạn (1 giờ sau)
+            const expiresAt = Date.now() + (60 * 60 * 1000);
+            
+            // Lưu key vào localStorage
+            const keyData = {
+                key: key,
+                expiresAt: expiresAt,
+                created: Date.now()
+            };
+            localStorage.setItem('current_key', JSON.stringify(keyData));
+            
+            // Xóa trạng thái đã click quảng cáo
+            localStorage.removeItem('ad_clicked');
+            
             // Hiển thị key
             document.getElementById('keyDisplay').textContent = key;
             document.getElementById('keyContainer').style.display = 'block';
+            document.getElementById('linkBtn').style.display = 'none';
+            document.getElementById('completeBtn').style.display = 'none';
             
             // Cuộn xuống phần key
             document.getElementById('keyContainer').scrollIntoView({ behavior: 'smooth' });
             
-            // Lưu vào localStorage để track đã lấy key
-            localStorage.setItem('last_free_key', JSON.stringify({
-                key: key,
-                timestamp: Date.now()
-            }));
-            
             // Bắt đầu đếm ngược
-            startTimer(60 * 60); // 60 phút
+            startTimer(60 * 60);
+            showStatus("Key đã được tạo. Key có hiệu lực trong 1 giờ.");
         }
         
         // Hàm tạo chuỗi ngẫu nhiên
@@ -292,28 +406,43 @@
         
         // Đếm ngược thời gian
         function startTimer(totalSeconds) {
+            // Xóa interval cũ nếu có
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
             let seconds = totalSeconds;
             const timerElement = document.getElementById('timer');
             
-            const interval = setInterval(() => {
+            countdownInterval = setInterval(() => {
                 const minutes = Math.floor(seconds / 60);
                 const secs = seconds % 60;
                 timerElement.textContent = `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
                 
                 if (seconds <= 0) {
-                    clearInterval(interval);
+                    clearInterval(countdownInterval);
                     timerElement.textContent = 'HẾT HẠN';
                     timerElement.style.color = '#dc3545';
+                    
+                    // Xóa key đã hết hạn khỏi localStorage
+                    setTimeout(() => {
+                        localStorage.removeItem('current_key');
+                        location.reload(); // Tải lại trang để reset trạng thái
+                    }, 2000);
                 }
                 seconds--;
             }, 1000);
         }
         
-        // Kiểm tra nếu đã lấy key trong vòng 24h
+        // Kiểm tra trạng thái khi tải trang
         window.onload = function() {
-            const lastKey = JSON.parse(localStorage.getItem('last_free_key'));
-            if (lastKey && (Date.now() - lastKey.timestamp) < 24 * 60 * 60 * 1000) {
-                alert('Bạn đã nhận key FREE trong 24h gần đây. Vui lòng đợi để nhận key mới.');
+            checkCurrentStatus();
+            
+            // Xóa key đã hết hạn nếu có
+            const keyData = JSON.parse(localStorage.getItem('current_key'));
+            if (keyData && keyData.expiresAt < Date.now()) {
+                localStorage.removeItem('current_key');
+                localStorage.removeItem('ad_clicked');
             }
         };
     </script>
